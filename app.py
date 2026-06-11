@@ -32,9 +32,28 @@ def login_screen():
 
 def recs_screen(user_id):
     st.subheader(f"Reading as: {rec.persona_name[user_id]}")
-    st.write("**Your Top 10** — collaborative filtering · scroll →")
-    items = [(bid, None) for bid in RECS[user_id]["top10"]]
+    pool = RECS[user_id]["pool"]
+    mood = st.session_state.get("mood")
+
+    if mood:
+        st.write(f"**Re-ranked for:** _{mood}_  · scroll →")
+        with st.spinner("Asking the AI to re-rank for your mood…"):
+            ranked = rec.rerank(pool, mood)
+        items = ranked if ranked else [(bid, None) for bid in RECS[user_id]["top10"]]
+        if not ranked:
+            st.warning("Couldn't re-rank that mood — showing your Top 10.")
+    else:
+        st.write("**Your Top 10** — collaborative filtering · scroll →")
+        items = [(bid, None) for bid in RECS[user_id]["top10"]]
+
     render_cover_row(items)
+
+    typed = st.chat_input(
+        "What are you in the mood for? e.g. 'a twisty thriller with a strong female lead'"
+    )
+    if typed is not None:
+        st.session_state["mood"] = typed.strip() or None
+        st.rerun()
 
 
 COVER_CSS = """
