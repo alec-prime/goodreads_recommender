@@ -1,0 +1,19 @@
+# Secrets — NEVER commit
+secrets.json
+
+# Python venv & caches
+ai_venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Brainstorm scratch
+.superpowers/
+
+# Heavy intermediate (only needed once to derive genres; not used by the app)
+gb_book_tags.csv
+gb_books.csv
+gb_tags.csv
+
+# OS noise
+.DS_Store

@@ -1,0 +1,12 @@
+# Runtime (the app)
+streamlit>=1.40
+google-genai>=0.3
+pandas>=2.0
+numpy>=1.26
+
+# Build-time only (offline scripts) — not needed to run the app
+scikit-surprise>=1.1.4
+Faker>=30.0
+
+# Dev
+pytest>=8.0
