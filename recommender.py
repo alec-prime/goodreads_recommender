@@ -135,7 +135,11 @@ def rerank(pool, mood):
                 model=model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    temperature=0.2, response_mime_type="application/json"
+                    temperature=0.2,
+                    response_mime_type="application/json",
+                    # Flash models think by default (~4-6x slower here). This re-rank is
+                    # shallow — order a list, write one-line reasons — so disable it.
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
         except Exception:
