@@ -10,6 +10,9 @@ __pycache__/
 # Brainstorm scratch
 .superpowers/
 
+# Internal planning docs — kept out of the public repo
+docs/superpowers/
+
 # Heavy intermediate (only needed once to derive genres; not used by the app)
 gb_book_tags.csv
 gb_books.csv
