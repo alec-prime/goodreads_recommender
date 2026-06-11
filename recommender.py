@@ -57,12 +57,16 @@ from google import genai
 from google.genai import types
 
 _client = None
-_RERANK_MODEL = None
+_RERANK_MODELS = None
 
 
 def _get_client():
-    """Lazily create the Gemini client + pick the latest flash model."""
-    global _client, _RERANK_MODEL
+    """Lazily create the Gemini client + the ordered list of flash models to try.
+
+    Returns the models best-first (newest version first) so rerank() can fall back
+    to an older, stable model if the newest one is transiently unavailable (503).
+    """
+    global _client, _RERANK_MODELS
     if _client is None:
         with open(SECRETS_PATH) as f:
             _client = genai.Client(api_key=_json.load(f)["GOOGLE_API_KEY"])
@@ -71,11 +75,11 @@ def _get_client():
             for m in _client.models.list()
             if "generateContent" in (m.supported_actions or [])
         ]
-        avoid = ("preview", "exp", "thinking", "lite")
+        avoid = ("preview", "exp", "thinking", "lite", "image")
         cand = [n for n in names if "flash" in n and not any(a in n for a in avoid)]
         ver = lambda n: float(m.group(1)) if (m := re.search(r"(\d+\.\d+)", n)) else 0.0
-        _RERANK_MODEL = max(cand, key=ver) if cand else "gemini-2.0-flash"
-    return _client, _RERANK_MODEL
+        _RERANK_MODELS = sorted(cand, key=ver, reverse=True) or ["gemini-2.0-flash"]
+    return _client, _RERANK_MODELS
 
 
 def _parse_rerank_response(text, pool_ids):
@@ -118,14 +122,25 @@ def _build_rerank_prompt(pool, mood):
 
 def rerank(pool, mood):
     """Re-rank a candidate pool [(book_id, score)...] by a free-text mood.
-    Returns [(book_id, reason)...], validated to in-pool ids only."""
-    client, model = _get_client()
+    Returns [(book_id, reason)...], validated to in-pool ids only. Tries the
+    available flash models best-first, so a transient outage on the newest model
+    falls back to an older one; returns [] only if every model fails (the caller
+    then shows the plain Top-10)."""
+    client, models = _get_client()
     prompt = _build_rerank_prompt(pool, mood)
-    resp = client.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.2, response_mime_type="application/json"
-        ),
-    )
-    return _parse_rerank_response(resp.text, {bid for bid, _ in pool})
+    pool_ids = {bid for bid, _ in pool}
+    for model in models:
+        try:
+            resp = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.2, response_mime_type="application/json"
+                ),
+            )
+        except Exception:
+            continue
+        parsed = _parse_rerank_response(resp.text, pool_ids)
+        if parsed:
+            return parsed
+    return []
