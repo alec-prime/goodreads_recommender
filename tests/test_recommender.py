@@ -20,3 +20,21 @@ def test_lookups_are_populated():
     assert isinstance(recommender.persona_name, dict) or callable(
         recommender.persona_name
     )
+
+
+def test_parser_keeps_only_in_pool_ids():
+    pool_ids = {1, 2, 3}
+    text = (
+        '[{"book_id": 2, "reason": "match"}, {"book_id": 99, "reason": "hallucinated"}]'
+    )
+    out = recommender._parse_rerank_response(text, pool_ids)
+    assert out == [(2, "match")]  # 99 dropped
+
+
+def test_parser_handles_bad_json():
+    assert recommender._parse_rerank_response("not json", {1}) == []
+
+
+def test_parser_handles_markdown_fenced_json():
+    text = '```json\n[{"book_id": 1, "reason": "ok"}]\n```'
+    assert recommender._parse_rerank_response(text, {1}) == [(1, "ok")]
