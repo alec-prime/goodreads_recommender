@@ -16,6 +16,13 @@ def get_recs():
 RECS = get_recs()
 
 
+@st.cache_data(show_spinner=False)
+def cached_rerank(user_id, mood):
+    """Re-rank cached by (user, mood) so re-runs from UI interactions (clicks,
+    dialogs) reuse the result instead of making another Gemini call."""
+    return rec.rerank(RECS[user_id]["pool"], mood)
+
+
 def login_screen():
     st.title("Who's reading?")
     st.caption("Pick a profile to see their recommendations")
@@ -32,15 +39,20 @@ def login_screen():
 
 def recs_screen(user_id):
     st.subheader(f"Reading as: {rec.persona_name[user_id]}")
-    pool = RECS[user_id]["pool"]
     mood = st.session_state.get("mood")
 
     if mood:
         st.write(f"**Re-ranked for:** _{mood}_  · scroll →")
         with st.spinner("Asking the AI to re-rank for your mood…"):
-            ranked = rec.rerank(pool, mood)
-        items = ranked if ranked else [(bid, None) for bid in RECS[user_id]["top10"]]
-        if not ranked:
+            ranked = cached_rerank(user_id, mood)
+        if ranked:
+            # Always show 10: AI-ranked picks first (with reasons), then backfill
+            # from the CF pool so the row is never short if the LLM returns fewer.
+            chosen = {bid for bid, _ in ranked}
+            fill = [(b, None) for b, _ in RECS[user_id]["pool"] if b not in chosen]
+            items = (ranked + fill)[:10]
+        else:
+            items = [(bid, None) for bid in RECS[user_id]["top10"]]
             st.warning("Couldn't re-rank that mood — showing your Top 10.")
     else:
         st.write("**Your Top 10** — collaborative filtering · scroll →")

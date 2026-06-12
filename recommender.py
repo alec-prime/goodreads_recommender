@@ -115,7 +115,7 @@ def _build_rerank_prompt(pool, mood):
         f'match the reader\'s mood: "{mood}".\n'
         'Return a JSON array, best match first, of objects {"book_id": int, '
         '"reason": one short sentence}. Use ONLY book_ids from the candidates. '
-        "Include at most 10. Do not invent books.\n\n"
+        "Return the 10 best-matching books. Do not invent books.\n\n"
         f"Candidates:\n{catalog}"
     )
 
