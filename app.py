@@ -38,7 +38,15 @@ def login_screen():
 
 
 def recs_screen(user_id):
-    st.subheader(f"Reading as: {rec.persona_name[user_id]}")
+    header, logout = st.columns([5, 1])
+    with header:
+        st.subheader(f"Reading as: {rec.persona_name[user_id]}")
+    with logout:
+        if st.button("Log out", use_container_width=True):
+            st.session_state.pop("user_id", None)
+            st.session_state.pop("mood", None)
+            st.rerun()
+
     mood = st.session_state.get("mood")
 
     if mood:
@@ -77,12 +85,11 @@ COVER_CSS = """
   box-shadow:0 1px 4px rgba(0,0,0,.18); background:#e9e9e9; }
 .cover-ph { display:flex; align-items:center; justify-content:center;
   text-align:center; font-size:12px; color:#666; padding:8px; }
-.cover-title { font-size:12px; font-weight:600; margin-top:6px; line-height:1.2; }
-.cover-author { font-size:11px; color:#777; }
-.cover-card .reason {
+.cover-card .tip {
   visibility:hidden; position:absolute; bottom:64px; left:0; width:140px;
   background:#222; color:#fff; font-size:11px; padding:8px; border-radius:6px; z-index:5; }
-.cover-card:hover .reason { visibility:visible; }
+.cover-card .tip .tip-author { color:#bbb; }
+.cover-card:hover .tip { visibility:visible; }
 </style>
 """
 
@@ -98,12 +105,9 @@ def render_cover_row(items):
             if url
             else f'<div class="cover-ph">{title}</div>'
         )
-        rtip = f'<div class="reason">{html.escape(reason)}</div>' if reason else ""
-        cards.append(
-            f'<div class="cover-card">{rtip}{img}'
-            f'<div class="cover-title">{title}</div>'
-            f'<div class="cover-author">{author}</div></div>'
-        )
+        # Hover tooltip: title + author for every recommendation.
+        tip = f'<div class="tip">{title}<div class="tip-author">{author}</div></div>'
+        cards.append(f'<div class="cover-card">{tip}{img}</div>')
     st.markdown(
         COVER_CSS + f'<div class="cover-row">{"".join(cards)}</div>',
         unsafe_allow_html=True,
