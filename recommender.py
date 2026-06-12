@@ -16,6 +16,7 @@ BOOKS_PATH = "Books.csv"
 GENRES_PATH = "book_genres.csv"
 PERSONAS_PATH = "user_personas.csv"
 RECS_PATH = "recommendations.pkl"
+DESCRIPTIONS_PATH = "book_descriptions.csv"
 SECRETS_PATH = "secrets.json"
 
 _books = pd.read_csv(BOOKS_PATH).set_index("book_id")
@@ -23,6 +24,25 @@ TITLE = _books["title"].to_dict()
 AUTHOR = _books["authors"].to_dict()
 IMAGE_URL = _books["image_url"].to_dict()
 RATING = _books["average_rating"].to_dict()
+REVIEWS = _books["ratings_count"].to_dict()  # number of ratings (shown as review count)
+
+# Descriptions are fetched offline (fetch_descriptions.py) and cached to CSV, so the
+# app never calls an external API. Guarded so a missing/partial file can't break startup.
+try:
+    _descriptions = (
+        pd.read_csv(DESCRIPTIONS_PATH).set_index("book_id")["description"].to_dict()
+    )
+except Exception:
+    _descriptions = {}
+
+
+def description_of(book_id):
+    """Cached book description, or a friendly fallback when none was found."""
+    d = _descriptions.get(book_id)
+    return (
+        d.strip() if isinstance(d, str) and d.strip() else "No description available."
+    )
+
 
 _genres = pd.read_csv(GENRES_PATH).set_index("book_id")["genres"].to_dict()
 

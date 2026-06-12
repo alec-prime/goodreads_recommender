@@ -76,42 +76,96 @@ def recs_screen(user_id):
         st.rerun()
 
 
-COVER_CSS = """
-<style>
-.cover-row { display:flex; gap:16px; overflow-x:auto; padding:8px 2px 16px; }
-.cover-card { flex:0 0 140px; position:relative; }
-.cover-card img, .cover-ph {
-  width:140px; height:210px; object-fit:cover; border-radius:8px;
-  box-shadow:0 1px 4px rgba(0,0,0,.18); background:#e9e9e9; }
-.cover-ph { display:flex; align-items:center; justify-content:center;
-  text-align:center; font-size:12px; color:#666; padding:8px; }
-.cover-card .tip {
-  visibility:hidden; position:absolute; bottom:64px; left:0; width:140px;
-  background:#222; color:#fff; font-size:11px; padding:8px; border-radius:6px; z-index:5; }
-.cover-card .tip .tip-author { color:#bbb; }
-.cover-card:hover .tip { visibility:visible; }
-</style>
-"""
+def _dialog_cover(bid):
+    url = rec.cover_url(bid)
+    if url:
+        st.image(url, use_container_width=True)
+    else:
+        title = html.escape(str(rec.TITLE.get(bid, "")))
+        st.markdown(
+            f"<div style='height:200px;display:flex;align-items:center;"
+            f"justify-content:center;text-align:center;background:#e9e9e9;"
+            f"border-radius:8px;color:#666;font-size:12px;padding:8px'>{title}</div>",
+            unsafe_allow_html=True,
+        )
+
+
+@st.dialog("Book details", width="small")
+def show_book_detail(bid, reason):
+    """Compact modal: cover, title, author, rating, reviews, description, AI reason."""
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        _dialog_cover(bid)
+    with c2:
+        st.markdown(f"**{rec.TITLE.get(bid, '')}**")
+        st.caption(f"by {rec.AUTHOR.get(bid, '')}")
+        reviews = rec.REVIEWS.get(bid)
+        reviews_txt = f" · {int(reviews):,} ratings" if reviews is not None else ""
+        st.markdown(f"⭐ {rec.RATING.get(bid):.2f}{reviews_txt}")
+        genres = rec.genres_of(bid)
+        if genres:
+            st.caption(" · ".join(genres))
+    if reason:
+        st.info(f"✨ Why this fits your mood: {reason}")
+    st.write(rec.description_of(bid))
+
+
+def _css_str(s):
+    """Escape a string for use inside a CSS content:"..." value."""
+    return str(s).replace("\\", "\\\\").replace('"', '\\"')
 
 
 def render_cover_row(items):
-    cards = []
-    for bid, reason in items:
+    """Single horizontal scrolling row of clickable cover buttons (flat layout).
+
+    Each cover is a native st.button styled with the book's cover as a background
+    image, so a click opens the modal without reloading the session. The custom dark
+    tooltip (title bright + author dimmed) is drawn with CSS pseudo-elements directly
+    on the button — no wrapper container, so card spacing can't collapse.
+    """
+    rules = [
+        ".st-key-coverrow { overflow-x:auto !important; flex-wrap:nowrap !important; "
+        "align-items:flex-start; padding-bottom:12px; }",
+        ".st-key-coverrow button { width:180px !important; min-width:180px !important; "
+        "height:270px !important; padding:0 !important; border:none !important; "
+        "border-radius:8px; background-size:cover; background-position:center; "
+        "box-shadow:0 1px 4px rgba(0,0,0,.2); position:relative !important; "
+        "overflow:visible !important; }",
+    ]
+    for bid, _ in items:
         url = rec.cover_url(bid)
-        title = html.escape(str(rec.TITLE.get(bid, "")))
-        author = html.escape(str(rec.AUTHOR.get(bid, "")))
-        img = (
-            f'<img src="{url}" alt="">'
-            if url
-            else f'<div class="cover-ph">{title}</div>'
+        title = _css_str(rec.TITLE.get(bid, ""))
+        author = _css_str(rec.AUTHOR.get(bid, ""))
+        if url:
+            rules.append(
+                f".st-key-book_{bid} button {{ background-image:url('{url}'); }}"
+            )
+        else:
+            rules.append(
+                f".st-key-book_{bid} button p {{ color:#555 !important; "
+                f"font-size:11px; white-space:normal; padding:6px; }}"
+            )
+        # Dark tooltip as ONE box (no overlap): title then author on a new line.
+        rules.append(
+            f'.st-key-book_{bid} button::after {{ content:"{title}\\A {author}"; '
+            f"white-space:pre-line; position:absolute; left:6px; right:6px; bottom:34px; "
+            f"background:#222; color:#fff; font-size:11px; font-weight:600; line-height:1.3; "
+            f"padding:8px; border-radius:6px; text-align:left; z-index:8; visibility:hidden; }}"
         )
-        # Hover tooltip: title + author for every recommendation.
-        tip = f'<div class="tip">{title}<div class="tip-author">{author}</div></div>'
-        cards.append(f'<div class="cover-card">{tip}{img}</div>')
-    st.markdown(
-        COVER_CSS + f'<div class="cover-row">{"".join(cards)}</div>',
-        unsafe_allow_html=True,
-    )
+        rules.append(
+            f".st-key-book_{bid} button:hover::after {{ visibility:visible; }}"
+        )
+    st.markdown("<style>" + "\n".join(rules) + "</style>", unsafe_allow_html=True)
+
+    clicked = None
+    row = st.container(horizontal=True, key="coverrow", gap="small")
+    with row:
+        for bid, reason in items:
+            label = " " if rec.cover_url(bid) else str(rec.TITLE.get(bid, ""))[:60]
+            if st.button(label, key=f"book_{bid}"):
+                clicked = (bid, reason)
+    if clicked:
+        show_book_detail(*clicked)
 
 
 if "user_id" not in st.session_state:
