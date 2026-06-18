@@ -128,7 +128,9 @@ def _get_client():
         ]
         avoid = ("preview", "exp", "thinking", "lite")
         cand = [n for n in names if "flash" in n and not any(a in n for a in avoid)]
-        ver = lambda n: float(m.group(1)) if (m := re.search(r"(\d+\.\d+)", n)) else 0.0
+        ver = lambda n: (
+            float(hit.group(1)) if (hit := re.search(r"(\d+\.\d+)", n)) else 0.0
+        )
         _MODEL_NAME = max(cand, key=ver) if cand else "gemini-2.0-flash"
     return _client, _MODEL_NAME
 
@@ -136,22 +138,27 @@ def _get_client():
 def extract_genres(preference):
     """Map a free-text preference onto our genre vocabulary via Enum-constrained
     generation. response_schema=list[Genre] forces real genres — the model cannot
-    invent one — so no post-hoc filtering is needed. Returns list[str] ([] if none)."""
+    invent one — so no post-hoc filtering is needed. Returns list[str], or [] if
+    nothing matched OR the call failed (callers treat [] as "no genre signal" and
+    fall back to the plain CF Top-N)."""
     client, model = _get_client()
-    resp = client.models.generate_content(
-        model=model,
-        contents=(
-            f"Map this reader preference to 1-4 genres that best capture it.\n"
-            f'Preference: "{preference}"'
-        ),
-        config=types.GenerateContentConfig(
-            temperature=0,
-            response_mime_type="application/json",
-            response_schema=list[Genre],
-            # Flash thinks by default (~4-6x slower); this is a shallow mapping.
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-        ),
-    )
+    try:
+        resp = client.models.generate_content(
+            model=model,
+            contents=(
+                f"Map this reader preference to 1-4 genres that best capture it.\n"
+                f'Preference: "{preference}"'
+            ),
+            config=types.GenerateContentConfig(
+                temperature=0,
+                response_mime_type="application/json",
+                response_schema=list[Genre],
+                # Flash thinks by default (~4-6x slower); this is a shallow mapping.
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+    except Exception:
+        return []
     return [g.value for g in (resp.parsed or [])]
 
 
