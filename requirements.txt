@@ -3,9 +3,10 @@ streamlit>=1.40
 google-genai>=0.3
 pandas>=2.0
 numpy>=1.26
+pydantic>=2.0
+scikit-surprise>=1.1.4   # runtime: app loads & predicts with the pickled CF model
 
-# Build-time only (offline scripts) — not needed to run the app
-scikit-surprise>=1.1.4
+# Build-time only (offline scripts)
 Faker>=30.0
 
 # Dev
