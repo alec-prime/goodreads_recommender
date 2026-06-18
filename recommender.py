@@ -109,15 +109,16 @@ GENRE_VOCAB = sorted(
 Genre = Enum("Genre", {g.upper(): g for g in GENRE_VOCAB})
 
 _client = None
-_MODEL_NAME = None
+_MODELS = None
 
 
 def _get_client():
-    """Lazily create the Gemini client and pick the extract/rerank model.
+    """Lazily create the Gemini client + the ordered flash models to try.
 
-    Mirrors the notebook's pick_latest: highest-version flash model, excluding
-    preview/exp/thinking/lite variants."""
-    global _client, _MODEL_NAME
+    Returns the models newest-version first, so a transient outage on the newest
+    model (503 high-demand) or an exhausted quota (429) falls back to an older,
+    healthy one. Excludes image/preview/exp/thinking/lite variants."""
+    global _client, _MODELS
     if _client is None:
         with open(SECRETS_PATH) as f:
             _client = genai.Client(api_key=_json.load(f)["GOOGLE_API_KEY"])
@@ -126,13 +127,28 @@ def _get_client():
             for m in _client.models.list()
             if "generateContent" in (m.supported_actions or [])
         ]
-        avoid = ("preview", "exp", "thinking", "lite")
+        avoid = ("preview", "exp", "thinking", "lite", "image")
         cand = [n for n in names if "flash" in n and not any(a in n for a in avoid)]
         ver = lambda n: (
             float(hit.group(1)) if (hit := re.search(r"(\d+\.\d+)", n)) else 0.0
         )
-        _MODEL_NAME = max(cand, key=ver) if cand else "gemini-2.0-flash"
-    return _client, _MODEL_NAME
+        _MODELS = sorted(set(cand), key=ver, reverse=True) or ["gemini-2.0-flash"]
+    return _client, _MODELS
+
+
+def _generate(contents, config):
+    """Call generate_content trying the flash models best-first; return the
+    response from the first model that succeeds, or None if every model fails
+    (so callers degrade gracefully instead of crashing on a transient 503/429)."""
+    client, models = _get_client()
+    for model in models:
+        try:
+            return client.models.generate_content(
+                model=model, contents=contents, config=config
+            )
+        except Exception:
+            continue
+    return None
 
 
 def extract_genres(preference):
@@ -141,25 +157,20 @@ def extract_genres(preference):
     invent one — so no post-hoc filtering is needed. Returns list[str], or [] if
     nothing matched OR the call failed (callers treat [] as "no genre signal" and
     fall back to the plain CF Top-N)."""
-    client, model = _get_client()
-    try:
-        resp = client.models.generate_content(
-            model=model,
-            contents=(
-                f"Map this reader preference to 1-4 genres that best capture it.\n"
-                f'Preference: "{preference}"'
-            ),
-            config=types.GenerateContentConfig(
-                temperature=0,
-                response_mime_type="application/json",
-                response_schema=list[Genre],
-                # Flash thinks by default (~4-6x slower); this is a shallow mapping.
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
-    except Exception:
-        return []
-    return [g.value for g in (resp.parsed or [])]
+    resp = _generate(
+        contents=(
+            f"Map this reader preference to 1-4 genres that best capture it.\n"
+            f'Preference: "{preference}"'
+        ),
+        config=types.GenerateContentConfig(
+            temperature=0,
+            response_mime_type="application/json",
+            response_schema=list[Genre],
+            # Flash thinks by default (~4-6x slower); this is a shallow mapping.
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        ),
+    )
+    return [g.value for g in (resp.parsed or [])] if resp else []
 
 
 # ---- Stratified candidate pool ---------------------------------------------
@@ -188,8 +199,8 @@ class Pick(BaseModel):
 
 
 def _rerank_llm(cands, preference, top_n):
-    """Make the Gemini re-rank call; returns the raw list[Pick] (resp.parsed)."""
-    client, model = _get_client()
+    """Make the Gemini re-rank call; returns the raw list[Pick] (resp.parsed),
+    or [] if every model failed (so rerank degrades to an empty list)."""
     block = "\n".join(
         f'- id={b} | "{TITLE.get(b)}" by {AUTHOR.get(b)} '
         f"| cf_pred={p:.2f} | genres={'/'.join(genres_of(b))}"
@@ -202,8 +213,7 @@ def _rerank_llm(cands, preference, top_n):
         f"and as a tiebreaker. Use ONLY book_ids from the list; never invent a book.\n\n"
         f"Candidates:\n{block}"
     )
-    resp = client.models.generate_content(
-        model=model,
+    resp = _generate(
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=0.3,
@@ -212,7 +222,7 @@ def _rerank_llm(cands, preference, top_n):
             thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
-    return resp.parsed or []
+    return (resp.parsed or []) if resp else []
 
 
 def rerank(cands, preference, top_n=10):

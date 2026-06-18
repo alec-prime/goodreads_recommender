@@ -77,3 +77,40 @@ def test_rerank_truncates_to_top_n(monkeypatch):
     monkeypatch.setattr(recommender, "_rerank_llm", lambda c, p, n: fake)
     out = recommender.rerank(cands, "x", top_n=2)
     assert [r["book_id"] for r in out] == [1, 2]
+
+
+class _FakeModels:
+    """Stand-in for client.models: generate_content fails for ids in `fail`."""
+
+    def __init__(self, fail):
+        self.fail = fail
+        self.tried = []
+
+    def generate_content(self, model, contents, config):
+        self.tried.append(model)
+        if model in self.fail:
+            raise RuntimeError("503 UNAVAILABLE")
+        return f"resp-from-{model}"
+
+
+class _FakeClient:
+    def __init__(self, fail):
+        self.models = _FakeModels(fail)
+
+
+def test_generate_falls_back_to_next_healthy_model(monkeypatch):
+    # Newest model (m1) is down; _generate should fall back to m2.
+    client = _FakeClient(fail={"m1"})
+    monkeypatch.setattr(
+        recommender, "_get_client", lambda: (client, ["m1", "m2", "m3"])
+    )
+    out = recommender._generate("hi", None)
+    assert out == "resp-from-m2"
+    assert client.models.tried == ["m1", "m2"]  # stopped at first success
+
+
+def test_generate_returns_none_when_all_models_fail(monkeypatch):
+    client = _FakeClient(fail={"m1", "m2"})
+    monkeypatch.setattr(recommender, "_get_client", lambda: (client, ["m1", "m2"]))
+    assert recommender._generate("hi", None) is None
+    assert client.models.tried == ["m1", "m2"]  # exhausted all models
