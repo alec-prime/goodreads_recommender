@@ -8,6 +8,30 @@ import recommender as rec
 st.set_page_config(page_title="BookMatch", page_icon="📚", layout="wide")
 
 
+def inject_theme():
+    """One-time CSS: Lora headings + the cozy/sage chip, clear-genres link, and why pill.
+    Colors that Streamlit themes natively (bg, text, buttons) live in .streamlit/config.toml."""
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&display=swap');
+        .stApp h1, .stApp h2, .stApp h3 { font-family: 'Lora', Georgia, serif !important; }
+        .genre-chip { display:inline-block; background:#e4e8d4; color:#5e6e44;
+            font-size:0.95rem; font-weight:600; border-radius:14px; padding:4px 12px; }
+        .st-key-cleargenres button { background:transparent !important; border:none !important;
+            color:#5e6e44 !important; font-size:0.72rem !important; text-decoration:underline;
+            padding:0 !important; min-height:0 !important; box-shadow:none !important; }
+        .why-pill { background:#7d8c5c; color:#fff; border-radius:10px;
+            padding:10px 14px; font-size:0.95rem; margin:6px 0; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+inject_theme()
+
+
 @st.cache_data(show_spinner=False)
 def cached_score_unseen(user_id):
     """CF scores for a persona — computed once per user (model.predict is the cost)."""
