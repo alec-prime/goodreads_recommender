@@ -39,7 +39,7 @@ def login_screen():
         index=None,
         placeholder="Search a name…",
     )
-    if st.button("Continue", disabled=name is None):
+    if st.button("Continue", disabled=name is None, type="primary"):
         st.session_state["user_id"] = rec.NAME_TO_ID[name]
         st.rerun()
 
