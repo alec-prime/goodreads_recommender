@@ -151,7 +151,11 @@ def show_book_detail(bid, reason):
         if genres:
             st.caption(" · ".join(genres))
     if reason:
-        st.info(f"✨ Why this fits your preference: {reason}")
+        st.markdown(
+            "<div class='why-pill'>✨ Why this fits your preference: "
+            f"{html.escape(reason)}</div>",
+            unsafe_allow_html=True,
+        )
     st.write(rec.description_of(bid))
 
 
