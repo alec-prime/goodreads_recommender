@@ -14,7 +14,9 @@ def cached_score_unseen(user_id):
     return rec.score_unseen(user_id)
 
 
-@st.cache_data(show_spinner=False)
+# ttl=600: if a transient model outage yields an empty result, it self-heals
+# after 10 min instead of caching the failure for the whole session.
+@st.cache_data(show_spinner=False, ttl=600)
 def cached_recommend(user_id, preference):
     """Two-stage recommend, cached by (user, preference) so UI interactions
     (cover clicks, modal) never re-score or re-call Gemini.
@@ -118,7 +120,7 @@ def show_book_detail(bid, reason):
         if genres:
             st.caption(" · ".join(genres))
     if reason:
-        st.info(f"✨ Why this fits your mood: {reason}")
+        st.info(f"✨ Why this fits your preference: {reason}")
     st.write(rec.description_of(bid))
 
 
