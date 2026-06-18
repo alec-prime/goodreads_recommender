@@ -174,12 +174,12 @@ def render_cover_row(items):
     """
     rules = [
         ".st-key-coverrow { overflow-x:auto !important; flex-wrap:nowrap !important; "
-        "align-items:flex-start; padding-bottom:12px; }",
-        ".st-key-coverrow button { width:180px !important; min-width:180px !important; "
-        "height:270px !important; padding:0 !important; border:none !important; "
+        "align-items:flex-start; padding-bottom:12px; gap:14px; }",
+        ".st-key-coverrow button { width:300px !important; min-width:300px !important; "
+        "height:450px !important; padding:0 !important; border:none !important; "
         "border-radius:8px; background-size:cover; background-position:center; "
-        "box-shadow:0 1px 4px rgba(0,0,0,.2); position:relative !important; "
-        "overflow:visible !important; }",
+        "box-shadow:0 3px 10px rgba(91,63,46,.35); position:relative !important; "
+        "overflow:hidden !important; }",
     ]
     for bid, _ in items:
         url = rec.cover_url(bid)
@@ -194,16 +194,16 @@ def render_cover_row(items):
                 f".st-key-book_{bid} button p {{ color:#555 !important; "
                 f"font-size:11px; white-space:normal; padding:6px; }}"
             )
-        # Dark tooltip as ONE box (no overlap): title then author on a new line.
+        # Hover overlay: gradient over the bottom ~half of the cover, title + author.
         rules.append(
             f'.st-key-book_{bid} button::after {{ content:"{title}\\A {author}"; '
-            f"white-space:pre-line; position:absolute; left:6px; right:6px; bottom:34px; "
-            f"background:#222; color:#fff; font-size:11px; font-weight:600; line-height:1.3; "
-            f"padding:8px; border-radius:6px; text-align:left; z-index:8; visibility:hidden; }}"
+            f"white-space:pre-line; position:absolute; left:0; right:0; bottom:0; height:50%; "
+            f"background:linear-gradient(to top, rgba(30,20,12,.94), rgba(30,20,12,.75) 55%, "
+            f"rgba(30,20,12,0)); color:#fff; font-size:18px; font-weight:700; line-height:1.35; "
+            f"padding:14px; display:flex; flex-direction:column; justify-content:flex-end; "
+            f"text-align:left; z-index:8; opacity:0; transition:opacity .15s; }}"
         )
-        rules.append(
-            f".st-key-book_{bid} button:hover::after {{ visibility:visible; }}"
-        )
+        rules.append(f".st-key-book_{bid} button:hover::after {{ opacity:1; }}")
     st.markdown("<style>" + "\n".join(rules) + "</style>", unsafe_allow_html=True)
 
     clicked = None
