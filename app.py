@@ -89,11 +89,18 @@ def recs_screen(user_id):
             st.info("Couldn't pin down genres for that — showing your Top 10.")
             items = [(bid, None) for bid in top10]
         elif picks:
-            # Light UI: surface the two-stage logic (matched genres + pool size).
-            st.caption("🎯 " + "  ·  ".join(sorted(matched)))
-            st.caption(
-                f"preference-aware pool of {n_cands} CF-vetted candidates → AI re-ranked · scroll →"
-            )
+            # Matched genres as a sage chip, with a small "Clear genres" reset beside it.
+            chiprow = st.container(horizontal=True, key="chiprow")
+            with chiprow:
+                st.markdown(
+                    "<span class='genre-chip'>🎯 "
+                    + " · ".join(sorted(matched))
+                    + "</span>",
+                    unsafe_allow_html=True,
+                )
+                if st.button("Clear genres", key="cleargenres"):
+                    st.session_state["preference"] = None
+                    st.rerun()
             chosen = {p["book_id"] for p in picks}
             fill = [(b, None) for b, _ in scored if b not in chosen]
             items = ([(p["book_id"], p["reason"]) for p in picks] + fill)[:10]
