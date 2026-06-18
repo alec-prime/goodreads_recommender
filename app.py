@@ -8,19 +8,24 @@ import recommender as rec
 st.set_page_config(page_title="BookMatch", page_icon="📚", layout="wide")
 
 
-@st.cache_data
-def get_recs():
-    return rec.load_recommendations()
-
-
-RECS = get_recs()
+@st.cache_data(show_spinner=False)
+def cached_score_unseen(user_id):
+    """CF scores for a persona — computed once per user (model.predict is the cost)."""
+    return rec.score_unseen(user_id)
 
 
 @st.cache_data(show_spinner=False)
-def cached_rerank(user_id, mood):
-    """Re-rank cached by (user, mood) so re-runs from UI interactions (clicks,
-    dialogs) reuse the result instead of making another Gemini call."""
-    return rec.rerank(RECS[user_id]["pool"], mood)
+def cached_recommend(user_id, preference):
+    """Two-stage recommend, cached by (user, preference) so UI interactions
+    (cover clicks, modal) never re-score or re-call Gemini.
+    Returns (matched_genres:set, picks:list[dict], n_candidates:int).
+    Empty matched_genres -> (set(), [], 0): caller shows the plain CF Top-10."""
+    scored = cached_score_unseen(user_id)
+    cands, matched = rec.build_candidates(user_id, preference, scored=scored)
+    if not matched:
+        return set(), [], 0
+    picks = rec.rerank(cands, preference)
+    return matched, picks, len(cands)
 
 
 def login_screen():
@@ -44,27 +49,34 @@ def recs_screen(user_id):
     with logout:
         if st.button("Log out", use_container_width=True):
             st.session_state.pop("user_id", None)
-            st.session_state.pop("mood", None)
+            st.session_state.pop("preference", None)
             st.rerun()
 
-    mood = st.session_state.get("mood")
+    scored = cached_score_unseen(user_id)
+    top10 = [bid for bid, _ in scored[:10]]
+    preference = st.session_state.get("preference")
 
-    if mood:
-        st.write(f"**Re-ranked for:** _{mood}_  · scroll →")
-        with st.spinner("Asking the AI to re-rank for your mood…"):
-            ranked = cached_rerank(user_id, mood)
-        if ranked:
-            # Always show 10: AI-ranked picks first (with reasons), then backfill
-            # from the CF pool so the row is never short if the LLM returns fewer.
-            chosen = {bid for bid, _ in ranked}
-            fill = [(b, None) for b, _ in RECS[user_id]["pool"] if b not in chosen]
-            items = (ranked + fill)[:10]
+    if preference:
+        with st.spinner("Finding books for your preference…"):
+            matched, picks, n_cands = cached_recommend(user_id, preference)
+        if not matched:
+            st.info("Couldn't pin down genres for that — showing your Top 10.")
+            items = [(bid, None) for bid in top10]
+        elif picks:
+            # Light UI: surface the two-stage logic (matched genres + pool size).
+            st.caption("🎯 " + "  ·  ".join(sorted(matched)))
+            st.caption(
+                f"preference-aware pool of {n_cands} CF-vetted candidates → AI re-ranked · scroll →"
+            )
+            chosen = {p["book_id"] for p in picks}
+            fill = [(b, None) for b, _ in scored if b not in chosen]
+            items = ([(p["book_id"], p["reason"]) for p in picks] + fill)[:10]
         else:
-            items = [(bid, None) for bid in RECS[user_id]["top10"]]
-            st.warning("Couldn't re-rank that mood — showing your Top 10.")
+            st.warning("Couldn't re-rank that preference — showing your Top 10.")
+            items = [(bid, None) for bid in top10]
     else:
         st.write("**Your Top 10** — collaborative filtering · scroll →")
-        items = [(bid, None) for bid in RECS[user_id]["top10"]]
+        items = [(bid, None) for bid in top10]
 
     render_cover_row(items)
 
@@ -72,7 +84,7 @@ def recs_screen(user_id):
         "What are you in the mood for? e.g. 'a twisty thriller with a strong female lead'"
     )
     if typed is not None:
-        st.session_state["mood"] = typed.strip() or None
+        st.session_state["preference"] = typed.strip() or None
         st.rerun()
 
 
